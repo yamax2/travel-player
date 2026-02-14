@@ -15,14 +15,18 @@
             --text-muted: #666; --text-muted-active: #88aadd;
             --accent: #6688cc; --border: #222; --handle: #333;
             --shadow: rgba(0,0,0,0.6);
+            --panel-border: #2a2a2a;
+            --bg-player: #000;
         }
         [data-theme="light"] {
-            --bg: #f5f5f5; --bg-sidebar: #e8e8e8; --bg-hover: #ddd;
-            --bg-active: #d0d4e0; --text: #222; --text-heading: #333;
+            --bg: #fafafa; --bg-sidebar: #f0f0f0; --bg-hover: #e4e4e4;
+            --bg-active: #dce0ec; --text: #222; --text-heading: #333;
             --text-link: #555; --text-link-hover: #111; --text-active: #000;
             --text-muted: #888; --text-muted-active: #4466aa;
-            --accent: #4466aa; --border: #ccc; --handle: #bbb;
-            --shadow: rgba(0,0,0,0.15);
+            --accent: #4466aa; --border: #ddd; --handle: #bbb;
+            --shadow: rgba(0,0,0,0.08);
+            --panel-border: var(--border);
+            --bg-player: #e0e0e0;
         }
         /* System: default to dark, override with media query */
         [data-theme="system"] {
@@ -32,15 +36,19 @@
             --text-muted: #666; --text-muted-active: #88aadd;
             --accent: #6688cc; --border: #222; --handle: #333;
             --shadow: rgba(0,0,0,0.6);
+            --panel-border: #2a2a2a;
+            --bg-player: #000;
         }
         @media (prefers-color-scheme: light) {
             [data-theme="system"] {
-                --bg: #f5f5f5; --bg-sidebar: #e8e8e8; --bg-hover: #ddd;
-                --bg-active: #d0d4e0; --text: #222; --text-heading: #333;
+                --bg: #fafafa; --bg-sidebar: #f0f0f0; --bg-hover: #e4e4e4;
+                --bg-active: #dce0ec; --text: #222; --text-heading: #333;
                 --text-link: #555; --text-link-hover: #111; --text-active: #000;
                 --text-muted: #888; --text-muted-active: #4466aa;
-                --accent: #4466aa; --border: #ccc; --handle: #bbb;
-                --shadow: rgba(0,0,0,0.15);
+                --accent: #4466aa; --border: #ddd; --handle: #bbb;
+                --shadow: rgba(0,0,0,0.08);
+                --panel-border: var(--border);
+                --bg-player: #e0e0e0;
             }
         }
 
@@ -55,6 +63,7 @@
             align-items: center;
             min-height: 100vh;
             padding: 10px;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         h1 {
@@ -83,6 +92,12 @@
             padding: 3px 6px;
             font-size: 0.75rem;
             cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .theme-select:focus {
+            box-shadow: 0 0 0 2px var(--accent);
         }
 
         /* Chapters sidebar */
@@ -105,6 +120,20 @@
             border-radius: 8px 0 0 8px;
             overflow-y: auto;
             overflow-x: hidden;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .chapters-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chapters-sidebar::-webkit-scrollbar-track {
+            background: var(--bg-sidebar);
+        }
+
+        .chapters-sidebar::-webkit-scrollbar-thumb {
+            background: var(--handle);
+            border-radius: 3px;
         }
 
         .chapters-panel.collapsed .chapters-sidebar {
@@ -125,7 +154,7 @@
             font-size: 0.9rem;
             border-bottom: 1px solid var(--border);
             cursor: pointer;
-            transition: background 0.15s, color 0.15s;
+            transition: background-color 0.15s, color 0.15s, border-color 0.3s;
         }
 
         .chapters-sidebar li a:hover {
@@ -161,7 +190,7 @@
             justify-content: center;
             font-size: 14px;
             border-radius: 0 4px 4px 0;
-            transition: color 0.15s, background 0.15s;
+            transition: color 0.15s, background-color 0.3s;
         }
 
         .collapse-btn:hover {
@@ -210,10 +239,12 @@
         .player-wrapper {
             flex: 1;
             min-width: 200px;
-            background: #000;
+            background: var(--bg-player);
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 24px var(--shadow);
+            border: 1px solid var(--panel-border);
+            transition: box-shadow 0.3s, border-color 0.3s;
         }
 
         video {
@@ -242,6 +273,8 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 24px var(--shadow);
+            border: 1px solid var(--panel-border);
+            transition: box-shadow 0.3s, border-color 0.3s;
         }
 
         #map.hidden {
