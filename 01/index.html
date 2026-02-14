@@ -29,17 +29,34 @@
 
         .main-layout {
             display: flex;
-            gap: 16px;
             width: 100%;
+            height: 80vh;
+        }
+
+        /* Chapters sidebar */
+        .chapters-panel {
+            display: flex;
+            flex-shrink: 0;
+            width: 250px;
+            min-width: 0;
+            transition: width 0.2s;
+        }
+
+        .chapters-panel.collapsed {
+            width: auto;
         }
 
         .chapters-sidebar {
-            width: 250px;
-            flex-shrink: 0;
+            flex: 1;
+            min-width: 0;
             background: #1a1a1a;
-            border-radius: 8px;
+            border-radius: 8px 0 0 8px;
             overflow-y: auto;
-            max-height: 80vh;
+            overflow-x: hidden;
+        }
+
+        .chapters-panel.collapsed .chapters-sidebar {
+            display: none;
         }
 
         .chapters-sidebar ul {
@@ -80,9 +97,67 @@
             color: #88aadd;
         }
 
+        .collapse-btn {
+            width: 24px;
+            flex-shrink: 0;
+            background: #1a1a1a;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            border-radius: 0 4px 4px 0;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .collapse-btn:hover {
+            color: #eee;
+            background: #252525;
+        }
+
+        .chapters-panel.collapsed .collapse-btn {
+            border-radius: 4px;
+        }
+
+        /* Resize handles */
+        .resize-handle {
+            width: 6px;
+            flex-shrink: 0;
+            cursor: col-resize;
+            background: transparent;
+            position: relative;
+            z-index: 10;
+        }
+
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 32px;
+            background: #333;
+            border-radius: 1px;
+            transition: background 0.15s, height 0.15s;
+        }
+
+        .resize-handle:hover::after {
+            background: #6688cc;
+            height: 64px;
+        }
+
+        body.resizing .resize-handle::after {
+            background: #6688cc;
+            height: 64px;
+        }
+
+        /* Video */
         .player-wrapper {
             flex: 1;
-            min-width: 0;
+            min-width: 200px;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
@@ -92,7 +167,8 @@
         video {
             display: block;
             width: 100%;
-            max-height: 80vh;
+            height: 100%;
+            object-fit: contain;
         }
 
         /* hide the three-dot overflow menu in Chromium */
@@ -100,10 +176,17 @@
             display: none !important;
         }
 
+        /* hide volume controls (no audio) */
+        video::-webkit-media-controls-mute-button,
+        video::-webkit-media-controls-volume-slider {
+            display: none !important;
+        }
+
+        /* Map */
         #map {
             width: 350px;
+            min-width: 0;
             flex-shrink: 0;
-            max-height: 80vh;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
@@ -113,19 +196,39 @@
             display: none;
         }
 
+        #map.hidden + .resize-handle-map {
+            display: none;
+        }
+
+        /* Prevent text selection while dragging */
+        body.resizing {
+            user-select: none;
+            cursor: col-resize;
+        }
+
+        body.resizing video,
+        body.resizing iframe {
+            pointer-events: none;
+        }
+
     </style>
 </head>
 <body>
     <h1>2015-12-20 — Нердва</h1>
     <div class="main-layout">
-        <nav class="chapters-sidebar">
-            <ul id="chapter-list"></ul>
-        </nav>
+        <div class="chapters-panel collapsed" id="chapters-panel">
+            <nav class="chapters-sidebar">
+                <ul id="chapter-list"></ul>
+            </nav>
+            <button class="collapse-btn" id="collapse-btn" title="Toggle chapters">▶</button>
+        </div>
+        <div class="resize-handle" id="resize-left"></div>
         <div class="player-wrapper">
-            <video id="video" controls preload="metadata" disablePictureInPicture controlsList="nodownload noplaybackrate">
+            <video id="video" controls autoplay muted preload="metadata" disablePictureInPicture controlsList="nodownload noplaybackrate">
                 <source src="2015_12_20%20-%20%D0%9D%D0%B5%D1%80%D0%B4%D0%B2%D0%B0.mp4" type="video/mp4">
             </video>
         </div>
+        <div class="resize-handle resize-handle-map" id="resize-right"></div>
         <div id="map" class="hidden"></div>
     </div>
 
@@ -134,6 +237,56 @@
         const chapterList = document.getElementById('chapter-list');
         const mapDiv = document.getElementById('map');
         let chapters = [];
+
+        // --- Collapse ---
+        const chaptersPanel = document.getElementById('chapters-panel');
+        const collapseBtn = document.getElementById('collapse-btn');
+        collapseBtn.addEventListener('click', () => {
+            const collapsed = chaptersPanel.classList.toggle('collapsed');
+            collapseBtn.textContent = collapsed ? '▶' : '◀';
+        });
+
+        // --- Resize handles ---
+        function setupResize(handleEl, getSize, setSize, invert) {
+            let startX, startW;
+            handleEl.addEventListener('mousedown', e => {
+                e.preventDefault();
+                startX = e.clientX;
+                startW = getSize();
+                document.body.classList.add('resizing');
+
+                function onMove(e) {
+                    const dx = e.clientX - startX;
+                    setSize(Math.max(100, startW + (invert ? -dx : dx)));
+                }
+
+                function onUp() {
+                    document.body.classList.remove('resizing');
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    if (!mapDiv.classList.contains('hidden')) map.invalidateSize();
+                }
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+
+        // Left handle: drag right = wider chapters panel
+        setupResize(
+            document.getElementById('resize-left'),
+            () => chaptersPanel.offsetWidth,
+            w => { chaptersPanel.style.width = w + 'px'; },
+            false
+        );
+
+        // Right handle: drag left = wider map (invert dx)
+        setupResize(
+            document.getElementById('resize-right'),
+            () => mapDiv.offsetWidth,
+            w => { mapDiv.style.width = w + 'px'; },
+            true
+        );
 
         // Map state
         const map = L.map('map', { attributionControl: false });
@@ -147,7 +300,47 @@
         let trackLine = null;
         let trackpoints = [];
         let currentGpxChapter = null;
+        let lastTrackpointIdx = -1;
         const SPEED_FACTOR = 3;
+        const TILE_ZOOM = 12;
+        const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        const TILE_SUBDOMAINS = ['a', 'b', 'c', 'd'];
+
+        function latLonToTile(lat, lon, z) {
+            const x = Math.floor((lon + 180) / 360 * (1 << z));
+            const latRad = lat * Math.PI / 180;
+            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * (1 << z));
+            return [x, y];
+        }
+
+        let preloadedImages = [];
+
+        function preloadTiles(trackpoints) {
+            preloadedImages = [];
+            const seen = new Set();
+            const tiles = [];
+            const PAD = 3;
+            for (const pt of trackpoints) {
+                const [tx, ty] = latLonToTile(pt.lat, pt.lon, TILE_ZOOM);
+                for (let dx = -PAD; dx <= PAD; dx++) {
+                    for (let dy = -PAD; dy <= PAD; dy++) {
+                        const key = `${tx + dx},${ty + dy}`;
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            tiles.push([tx + dx, ty + dy]);
+                        }
+                    }
+                }
+            }
+            const r = L.Browser.retina ? '@2x' : '';
+            tiles.forEach(([x, y], i) => {
+                const s = TILE_SUBDOMAINS[i % TILE_SUBDOMAINS.length];
+                const url = TILE_URL.replace('{s}', s).replace('{z}', TILE_ZOOM).replace('{x}', x).replace('{y}', y).replace('{r}', r);
+                const img = new Image();
+                img.src = url;
+                preloadedImages.push(img);
+            });
+        }
 
         function formatTime(seconds) {
             const h = Math.floor(seconds / 3600);
@@ -159,11 +352,45 @@
 
         function showMap() {
             mapDiv.classList.remove('hidden');
+            document.getElementById('resize-right').style.display = '';
             setTimeout(() => map.invalidateSize(), 0);
         }
 
         function hideMap() {
             mapDiv.classList.add('hidden');
+            document.getElementById('resize-right').style.display = 'none';
+        }
+
+        // GPX cache: Map<chapterTitle, [{lat, lon}]>
+        const gpxCache = new Map();
+
+        function parseGpxText(xml) {
+            const doc = new DOMParser().parseFromString(xml, 'text/xml');
+            const pts = doc.querySelectorAll('trkpt');
+            return Array.from(pts).map(pt => ({
+                lat: parseFloat(pt.getAttribute('lat')),
+                lon: parseFloat(pt.getAttribute('lon'))
+            }));
+        }
+
+        function preloadAllGpx(chapters) {
+            const fetches = chapters.map(ch =>
+                fetch(`${ch.title}.gpx`)
+                    .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+                    .then(xml => {
+                        const points = parseGpxText(xml);
+                        if (points.length > 0) gpxCache.set(ch.title, points);
+                    })
+                    .catch(() => { /* no GPX for this chapter */ })
+            );
+            return Promise.allSettled(fetches).then(() => {
+                // Preload map tiles for all tracks at once
+                const allPoints = [];
+                for (const pts of gpxCache.values()) {
+                    for (const pt of pts) allPoints.push(pt);
+                }
+                if (allPoints.length > 0) preloadTiles(allPoints);
+            });
         }
 
         function loadGpx(chapterTitle) {
@@ -173,30 +400,17 @@
             if (trackLine) { map.removeLayer(trackLine); trackLine = null; }
             marker.remove();
             trackpoints = [];
+            lastTrackpointIdx = -1;
 
-            fetch(`${chapterTitle}.gpx`)
-                .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
-                .then(xml => {
-                    const doc = new DOMParser().parseFromString(xml, 'text/xml');
-                    const pts = doc.querySelectorAll('trkpt');
-                    trackpoints = Array.from(pts).map(pt => ({
-                        lat: parseFloat(pt.getAttribute('lat')),
-                        lon: parseFloat(pt.getAttribute('lon')),
-                        time: new Date(pt.querySelector('time').textContent)
-                    }));
-                    if (trackpoints.length === 0) { hideMap(); return; }
+            const cached = gpxCache.get(chapterTitle);
+            if (!cached || cached.length === 0) { hideMap(); return; }
 
-                    const latlngs = trackpoints.map(p => [p.lat, p.lon]);
-                    trackLine = L.polyline(latlngs, { color: '#4488cc', weight: 3, opacity: 0.7 }).addTo(map);
-                    marker.setLatLng(latlngs[0]).addTo(map);
-                    map.setView(latlngs[0], 17);
-                    showMap();
-                })
-                .catch(() => {
-                    currentGpxChapter = chapterTitle;
-                    trackpoints = [];
-                    hideMap();
-                });
+            trackpoints = cached;
+            const latlngs = trackpoints.map(p => [p.lat, p.lon]);
+            trackLine = L.polyline(latlngs, { color: '#4488cc', weight: 3, opacity: 0.7 }).addTo(map);
+            marker.setLatLng(latlngs[0]).addTo(map);
+            map.setView(latlngs[0], TILE_ZOOM);
+            showMap();
         }
 
         function getActiveChapter(t) {
@@ -224,8 +438,12 @@
                     li.appendChild(a);
                     chapterList.appendChild(li);
                 });
-                // Load GPX for first chapter
-                loadGpx(chapters[0].title);
+                // Preload all GPX files in parallel, then load first chapter's track
+                preloadAllGpx(chapters).then(() => {
+                    // Reset so loadGpx re-evaluates after cache is populated
+                    currentGpxChapter = null;
+                    loadGpx(chapters[0].title);
+                });
             });
 
         video.addEventListener('timeupdate', () => {
@@ -248,9 +466,12 @@
                 const elapsed = t - ch.start;
                 const realElapsed = elapsed * SPEED_FACTOR;
                 const idx = Math.min(Math.max(0, Math.floor(realElapsed)), trackpoints.length - 1);
-                const pt = trackpoints[idx];
-                marker.setLatLng([pt.lat, pt.lon]);
-                map.setView([pt.lat, pt.lon]);
+                if (idx !== lastTrackpointIdx) {
+                    lastTrackpointIdx = idx;
+                    const pt = trackpoints[idx];
+                    marker.setLatLng([pt.lat, pt.lon]);
+                    map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.3 });
+                }
             }
         });
     </script>
