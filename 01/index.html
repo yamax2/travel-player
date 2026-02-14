@@ -285,6 +285,28 @@
             display: none;
         }
 
+        /* Speed/heading overlay on map */
+        .map-overlay {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 0.8rem;
+            font-variant-numeric: tabular-nums;
+            padding: 4px 8px;
+            border-radius: 4px;
+            pointer-events: none;
+            line-height: 1.4;
+            backdrop-filter: blur(4px);
+        }
+
+        .map-overlay .speed {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
         /* Prevent text selection while dragging */
         body.resizing {
             user-select: none;
@@ -335,6 +357,8 @@
                 document.title = meta.title;
                 titleEl.textContent = meta.title;
                 video.src = meta.video;
+                if (meta.speed) SPEED_FACTOR = meta.speed;
+                if (meta.gpsOffset) GPS_OFFSET = meta.gpsOffset;
             });
 
         // --- Collapse ---
@@ -349,6 +373,25 @@
         const map = L.map('map', { attributionControl: false });
         const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
         L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(map);
+
+        // Speed/heading overlay
+        const mapOverlay = document.createElement('div');
+        mapOverlay.className = 'map-overlay';
+        mapOverlay.style.display = 'none';
+        mapDiv.appendChild(mapOverlay);
+
+        const HEADING_ARROWS = ['N ↑','NE ↗','E →','SE ↘','S ↓','SW ↙','W ←','NW ↖'];
+        function headingLabel(deg) {
+            return HEADING_ARROWS[Math.round(deg / 45) % 8];
+        }
+
+        function updateOverlay(pt) {
+            if (pt.speed == null) { mapOverlay.style.display = 'none'; return; }
+            mapOverlay.style.display = '';
+            const spd = Math.round(pt.speed);
+            const dir = pt.course != null ? headingLabel(pt.course) : '';
+            mapOverlay.innerHTML = `<span class="speed">${spd} km/h</span> ${dir}`;
+        }
 
         // --- Theme switcher ---
         const themeSelect = document.getElementById('theme-select');
@@ -413,7 +456,8 @@
         let trackpoints = [];
         let currentGpxChapter = null;
         let lastTrackpointIdx = -1;
-        const SPEED_FACTOR = 3;
+        let SPEED_FACTOR = 1;
+        let GPS_OFFSET = 0;
         const TILE_ZOOM = 13;
 
         function latLonToTile(lat, lon, z) {
@@ -467,18 +511,26 @@
         function hideMap() {
             mapDiv.classList.add('hidden');
             document.getElementById('resize-right').style.display = 'none';
+            mapOverlay.style.display = 'none';
         }
 
-        // GPX cache: Map<chapterTitle, [{lat, lon}]>
+        // GPX cache: Map<chapterTitle, [{lat, lon, speed?, course?}]>
         const gpxCache = new Map();
 
         function parseGpxText(xml) {
             const doc = new DOMParser().parseFromString(xml, 'text/xml');
             const pts = doc.querySelectorAll('trkpt');
-            return Array.from(pts).map(pt => ({
-                lat: parseFloat(pt.getAttribute('lat')),
-                lon: parseFloat(pt.getAttribute('lon'))
-            }));
+            return Array.from(pts).map(pt => {
+                const p = {
+                    lat: parseFloat(pt.getAttribute('lat')),
+                    lon: parseFloat(pt.getAttribute('lon'))
+                };
+                const spd = pt.querySelector('speed');
+                const crs = pt.querySelector('course');
+                if (spd) p.speed = parseFloat(spd.textContent);
+                if (crs) p.course = parseFloat(crs.textContent);
+                return p;
+            });
         }
 
         function preloadAllGpx(chapters) {
@@ -571,14 +623,21 @@
             if (ch) loadGpx(ch.title);
 
             if (trackpoints.length > 0 && ch) {
-                const elapsed = t - ch.start;
-                const realElapsed = elapsed * SPEED_FACTOR;
-                const idx = Math.min(Math.max(0, Math.floor(realElapsed)), trackpoints.length - 1);
-                if (idx !== lastTrackpointIdx) {
-                    lastTrackpointIdx = idx;
-                    const pt = trackpoints[idx];
-                    marker.setLatLng([pt.lat, pt.lon]);
-                    map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.3 });
+                const elapsed = t - ch.start - GPS_OFFSET;
+                if (elapsed < 0) {
+                    marker.remove();
+                    mapOverlay.style.display = 'none';
+                } else {
+                    const realElapsed = elapsed * SPEED_FACTOR;
+                    const idx = Math.min(Math.floor(realElapsed), trackpoints.length - 1);
+                    if (idx !== lastTrackpointIdx) {
+                        lastTrackpointIdx = idx;
+                        const pt = trackpoints[idx];
+                        if (!map.hasLayer(marker)) marker.addTo(map);
+                        marker.setLatLng([pt.lat, pt.lon]);
+                        map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.3 });
+                        updateOverlay(pt);
+                    }
                 }
             }
         });
