@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2015-12-20 — Нердва</title>
+    <title></title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -304,7 +304,7 @@
         <option value="light">Light</option>
         <option value="dark">Dark</option>
     </select>
-    <h1>2015-12-20 — Нердва</h1>
+    <h1 id="title"></h1>
     <div class="main-layout">
         <div class="chapters-panel collapsed" id="chapters-panel">
             <nav class="chapters-sidebar">
@@ -315,7 +315,6 @@
         <div class="resize-handle" id="resize-left"></div>
         <div class="player-wrapper">
             <video id="video" controls autoplay muted preload="metadata" disablePictureInPicture controlsList="nodownload noplaybackrate">
-                <source src="2015_12_20%20-%20%D0%9D%D0%B5%D1%80%D0%B4%D0%B2%D0%B0.mp4" type="video/mp4">
             </video>
         </div>
         <div class="resize-handle resize-handle-map" id="resize-right"></div>
@@ -326,7 +325,17 @@
         const video = document.getElementById('video');
         const chapterList = document.getElementById('chapter-list');
         const mapDiv = document.getElementById('map');
+        const titleEl = document.getElementById('title');
         let chapters = [];
+
+        // --- Load index.json ---
+        fetch('index.json')
+            .then(r => r.json())
+            .then(meta => {
+                document.title = meta.title;
+                titleEl.textContent = meta.title;
+                video.src = meta.video;
+            });
 
         // --- Collapse ---
         const chaptersPanel = document.getElementById('chapters-panel');
