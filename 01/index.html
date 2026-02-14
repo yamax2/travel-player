@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="system">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,11 +7,48 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
+        /* --- Theme definitions --- */
+        [data-theme="dark"] {
+            --bg: #111; --bg-sidebar: #1a1a1a; --bg-hover: #252525;
+            --bg-active: #2a2a3a; --text: #eee; --text-heading: #ccc;
+            --text-link: #aaa; --text-link-hover: #eee; --text-active: #fff;
+            --text-muted: #666; --text-muted-active: #88aadd;
+            --accent: #6688cc; --border: #222; --handle: #333;
+            --shadow: rgba(0,0,0,0.6);
+        }
+        [data-theme="light"] {
+            --bg: #f5f5f5; --bg-sidebar: #e8e8e8; --bg-hover: #ddd;
+            --bg-active: #d0d4e0; --text: #222; --text-heading: #333;
+            --text-link: #555; --text-link-hover: #111; --text-active: #000;
+            --text-muted: #888; --text-muted-active: #4466aa;
+            --accent: #4466aa; --border: #ccc; --handle: #bbb;
+            --shadow: rgba(0,0,0,0.15);
+        }
+        /* System: default to dark, override with media query */
+        [data-theme="system"] {
+            --bg: #111; --bg-sidebar: #1a1a1a; --bg-hover: #252525;
+            --bg-active: #2a2a3a; --text: #eee; --text-heading: #ccc;
+            --text-link: #aaa; --text-link-hover: #eee; --text-active: #fff;
+            --text-muted: #666; --text-muted-active: #88aadd;
+            --accent: #6688cc; --border: #222; --handle: #333;
+            --shadow: rgba(0,0,0,0.6);
+        }
+        @media (prefers-color-scheme: light) {
+            [data-theme="system"] {
+                --bg: #f5f5f5; --bg-sidebar: #e8e8e8; --bg-hover: #ddd;
+                --bg-active: #d0d4e0; --text: #222; --text-heading: #333;
+                --text-link: #555; --text-link-hover: #111; --text-active: #000;
+                --text-muted: #888; --text-muted-active: #4466aa;
+                --accent: #4466aa; --border: #ccc; --handle: #bbb;
+                --shadow: rgba(0,0,0,0.15);
+            }
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background: #111;
-            color: #eee;
+            background: var(--bg);
+            color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
@@ -24,13 +61,28 @@
             font-size: 1.4rem;
             font-weight: 500;
             margin-bottom: 16px;
-            color: #ccc;
+            color: var(--text-heading);
         }
 
         .main-layout {
             display: flex;
             width: 100%;
             height: 80vh;
+        }
+
+        /* Theme selector */
+        .theme-select {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: var(--bg-sidebar);
+            color: var(--text-link);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
         }
 
         /* Chapters sidebar */
@@ -49,7 +101,7 @@
         .chapters-sidebar {
             flex: 1;
             min-width: 0;
-            background: #1a1a1a;
+            background: var(--bg-sidebar);
             border-radius: 8px 0 0 8px;
             overflow-y: auto;
             overflow-x: hidden;
@@ -68,41 +120,41 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px 14px;
-            color: #aaa;
+            color: var(--text-link);
             text-decoration: none;
             font-size: 0.9rem;
-            border-bottom: 1px solid #222;
+            border-bottom: 1px solid var(--border);
             cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
 
         .chapters-sidebar li a:hover {
-            background: #252525;
-            color: #eee;
+            background: var(--bg-hover);
+            color: var(--text-link-hover);
         }
 
         .chapters-sidebar li.active a {
-            background: #2a2a3a;
-            color: #fff;
-            border-left: 3px solid #6688cc;
+            background: var(--bg-active);
+            color: var(--text-active);
+            border-left: 3px solid var(--accent);
         }
 
         .chapters-sidebar li a .ch-time {
-            color: #666;
+            color: var(--text-muted);
             font-size: 0.8rem;
             font-variant-numeric: tabular-nums;
         }
 
         .chapters-sidebar li.active a .ch-time {
-            color: #88aadd;
+            color: var(--text-muted-active);
         }
 
         .collapse-btn {
             width: 24px;
             flex-shrink: 0;
-            background: #1a1a1a;
+            background: var(--bg-sidebar);
             border: none;
-            color: #666;
+            color: var(--text-muted);
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -113,8 +165,8 @@
         }
 
         .collapse-btn:hover {
-            color: #eee;
-            background: #252525;
+            color: var(--text-link-hover);
+            background: var(--bg-hover);
         }
 
         .chapters-panel.collapsed .collapse-btn {
@@ -139,18 +191,18 @@
             transform: translate(-50%, -50%);
             width: 2px;
             height: 32px;
-            background: #333;
+            background: var(--handle);
             border-radius: 1px;
             transition: background 0.15s, height 0.15s;
         }
 
         .resize-handle:hover::after {
-            background: #6688cc;
+            background: var(--accent);
             height: 64px;
         }
 
         body.resizing .resize-handle::after {
-            background: #6688cc;
+            background: var(--accent);
             height: 64px;
         }
 
@@ -161,7 +213,7 @@
             background: #000;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 4px 24px var(--shadow);
         }
 
         video {
@@ -189,7 +241,7 @@
             flex-shrink: 0;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 4px 24px var(--shadow);
         }
 
         #map.hidden {
@@ -214,6 +266,11 @@
     </style>
 </head>
 <body>
+    <select class="theme-select" id="theme-select">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+    </select>
     <h1>2015-12-20 — Нердва</h1>
     <div class="main-layout">
         <div class="chapters-panel collapsed" id="chapters-panel">
@@ -245,6 +302,45 @@
             const collapsed = chaptersPanel.classList.toggle('collapsed');
             collapseBtn.textContent = collapsed ? '▶' : '◀';
         });
+
+        // --- Map init (before theme switcher so tiles can be swapped) ---
+        const map = L.map('map', { attributionControl: false });
+        let TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        let tileLayer = L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(map);
+
+        // --- Theme switcher ---
+        const themeSelect = document.getElementById('theme-select');
+        const darkMq = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function effectiveIsDark(theme) {
+            if (theme === 'dark') return true;
+            if (theme === 'light') return false;
+            return darkMq.matches;
+        }
+
+        function swapTiles(isDark) {
+            const variant = isDark ? 'dark_all' : 'light_all';
+            const url = `https://{s}.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}{r}.png`;
+            TILE_URL = url;
+            if (tileLayer) map.removeLayer(tileLayer);
+            tileLayer = L.tileLayer(url, { maxZoom: 19 }).addTo(map);
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.dataset.theme = theme;
+            localStorage.setItem('theme', theme);
+            themeSelect.value = theme;
+            swapTiles(effectiveIsDark(theme));
+        }
+
+        darkMq.addEventListener('change', () => {
+            if (document.documentElement.dataset.theme === 'system') {
+                swapTiles(darkMq.matches);
+            }
+        });
+
+        themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
+        applyTheme(localStorage.getItem('theme') || 'system');
 
         // --- Resize handles ---
         function setupResize(handleEl, getSize, setSize, invert) {
@@ -289,10 +385,6 @@
         );
 
         // Map state
-        const map = L.map('map', { attributionControl: false });
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19
-        }).addTo(map);
         const marker = L.circleMarker([0, 0], {
             radius: 7, fillColor: '#ff4444', fillOpacity: 1,
             color: '#fff', weight: 2
@@ -303,7 +395,6 @@
         let lastTrackpointIdx = -1;
         const SPEED_FACTOR = 3;
         const TILE_ZOOM = 12;
-        const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
         const TILE_SUBDOMAINS = ['a', 'b', 'c', 'd'];
 
         function latLonToTile(lat, lon, z) {
