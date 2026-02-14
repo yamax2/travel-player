@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2015-12-20 — Нердва</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #111;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: #ccc;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .chapters-sidebar {
+            width: 250px;
+            flex-shrink: 0;
+            background: #1a1a1a;
+            border-radius: 8px;
+            overflow-y: auto;
+            max-height: 80vh;
+        }
+
+        .chapters-sidebar ul {
+            list-style: none;
+        }
+
+        .chapters-sidebar li a {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #222;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .chapters-sidebar li a:hover {
+            background: #252525;
+            color: #eee;
+        }
+
+        .chapters-sidebar li.active a {
+            background: #2a2a3a;
+            color: #fff;
+            border-left: 3px solid #6688cc;
+        }
+
+        .chapters-sidebar li a .ch-time {
+            color: #666;
+            font-size: 0.8rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chapters-sidebar li.active a .ch-time {
+            color: #88aadd;
+        }
+
+        .player-wrapper {
+            flex: 1;
+            min-width: 0;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            max-height: 80vh;
+        }
+
+        /* hide the three-dot overflow menu in Chromium */
+        video::-webkit-media-controls-overflow-button {
+            display: none !important;
+        }
+
+        #map {
+            width: 350px;
+            flex-shrink: 0;
+            max-height: 80vh;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        #map.hidden {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+    <h1>2015-12-20 — Нердва</h1>
+    <div class="main-layout">
+        <nav class="chapters-sidebar">
+            <ul id="chapter-list"></ul>
+        </nav>
+        <div class="player-wrapper">
+            <video id="video" controls preload="metadata" disablePictureInPicture controlsList="nodownload noplaybackrate">
+                <source src="2015_12_20%20-%20%D0%9D%D0%B5%D1%80%D0%B4%D0%B2%D0%B0.mp4" type="video/mp4">
+            </video>
+        </div>
+        <div id="map" class="hidden"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const chapterList = document.getElementById('chapter-list');
+        const mapDiv = document.getElementById('map');
+        let chapters = [];
+
+        // Map state
+        const map = L.map('map', { attributionControl: false });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(map);
+        const marker = L.circleMarker([0, 0], {
+            radius: 7, fillColor: '#ff4444', fillOpacity: 1,
+            color: '#fff', weight: 2
+        });
+        let trackLine = null;
+        let trackpoints = [];
+        let currentGpxChapter = null;
+        const SPEED_FACTOR = 3;
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function showMap() {
+            mapDiv.classList.remove('hidden');
+            setTimeout(() => map.invalidateSize(), 0);
+        }
+
+        function hideMap() {
+            mapDiv.classList.add('hidden');
+        }
+
+        function loadGpx(chapterTitle) {
+            if (chapterTitle === currentGpxChapter) return;
+            currentGpxChapter = chapterTitle;
+
+            if (trackLine) { map.removeLayer(trackLine); trackLine = null; }
+            marker.remove();
+            trackpoints = [];
+
+            fetch(`${chapterTitle}.gpx`)
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+                .then(xml => {
+                    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+                    const pts = doc.querySelectorAll('trkpt');
+                    trackpoints = Array.from(pts).map(pt => ({
+                        lat: parseFloat(pt.getAttribute('lat')),
+                        lon: parseFloat(pt.getAttribute('lon')),
+                        time: new Date(pt.querySelector('time').textContent)
+                    }));
+                    if (trackpoints.length === 0) { hideMap(); return; }
+
+                    const latlngs = trackpoints.map(p => [p.lat, p.lon]);
+                    trackLine = L.polyline(latlngs, { color: '#4488cc', weight: 3, opacity: 0.7 }).addTo(map);
+                    marker.setLatLng(latlngs[0]).addTo(map);
+                    map.setView(latlngs[0], 17);
+                    showMap();
+                })
+                .catch(() => {
+                    currentGpxChapter = chapterTitle;
+                    trackpoints = [];
+                    hideMap();
+                });
+        }
+
+        function getActiveChapter(t) {
+            for (let i = 0; i < chapters.length; i++) {
+                if (t >= chapters[i].start && t < chapters[i].end) return chapters[i];
+            }
+            return chapters[chapters.length - 1];
+        }
+
+        fetch('chapters.json')
+            .then(r => r.json())
+            .then(data => {
+                chapters = data;
+                chapters.forEach((ch, i) => {
+                    const li = document.createElement('li');
+                    li.dataset.index = i;
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.innerHTML = `<span class="ch-title">${ch.title}</span><span class="ch-time">${formatTime(ch.end - ch.start)}</span>`;
+                    a.addEventListener('click', e => {
+                        e.preventDefault();
+                        video.currentTime = ch.start;
+                        video.play();
+                    });
+                    li.appendChild(a);
+                    chapterList.appendChild(li);
+                });
+                // Load GPX for first chapter
+                loadGpx(chapters[0].title);
+            });
+
+        video.addEventListener('timeupdate', () => {
+            const t = video.currentTime;
+            const items = chapterList.children;
+            for (let i = 0; i < items.length; i++) {
+                const ch = chapters[i];
+                const isActive = t >= ch.start && t < ch.end;
+                items[i].classList.toggle('active', isActive);
+                if (isActive && items[i].scrollIntoViewIfNeeded) {
+                    items[i].scrollIntoViewIfNeeded(false);
+                }
+            }
+
+            // GPS sync
+            const ch = getActiveChapter(t);
+            if (ch) loadGpx(ch.title);
+
+            if (trackpoints.length > 0 && ch) {
+                const elapsed = t - ch.start;
+                const realElapsed = elapsed * SPEED_FACTOR;
+                const idx = Math.min(Math.max(0, Math.floor(realElapsed)), trackpoints.length - 1);
+                const pt = trackpoints[idx];
+                marker.setLatLng([pt.lat, pt.lon]);
+                map.setView([pt.lat, pt.lon]);
+            }
+        });
+    </script>
+</body>
+</html>
