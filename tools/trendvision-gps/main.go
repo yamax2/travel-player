@@ -86,7 +86,6 @@ func main() {
 	var points []trackpoint
 	firstFixPTS := -1.0
 	lastNMEATime := ""
-	lastKey := ""
 
 	// Derive GPX filename from MP4 path
 	ext := filepath.Ext(file)
@@ -143,14 +142,6 @@ func main() {
 				crs, _ := strconv.ParseFloat(fields[7], 64)
 				date := parseDate(fields[8])
 
-				// Skip if formatted values identical to previous point
-				key := fmt.Sprintf("%.7f,%.7f,%.1f,%.1f", lat, lon, spd, crs)
-				if key == lastKey {
-					packetIdx++
-					continue
-				}
-				lastKey = key
-
 				points = append(points, trackpoint{
 					lat:    lat,
 					lon:    lon,
@@ -165,6 +156,22 @@ func main() {
 		packetIdx++
 	}
 
+	// Fill gaps so the array is contiguous (one trackpoint per second)
+	var filled []trackpoint
+	for i, p := range points {
+		if i > 0 && p.sec > points[i-1].sec+1 {
+			prev := points[i-1]
+			for s := prev.sec + 1; s < p.sec; s++ {
+				filled = append(filled, trackpoint{
+					lat: prev.lat, lon: prev.lon,
+					speed: prev.speed, course: prev.course,
+					date: prev.date, sec: s,
+				})
+			}
+		}
+		filled = append(filled, p)
+	}
+
 	// Write GPX file
 	var gpx strings.Builder
 	gpx.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
@@ -173,7 +180,7 @@ func main() {
 	gpx.WriteString(fmt.Sprintf("    <name>%s</name>\n", baseName))
 	gpx.WriteString("    <trkseg>\n")
 
-	for _, p := range points {
+	for _, p := range filled {
 		h := p.sec / 3600
 		m := (p.sec % 3600) / 60
 		s := p.sec % 60
