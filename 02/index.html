@@ -358,6 +358,7 @@
                 titleEl.textContent = meta.title;
                 video.src = meta.video;
                 if (meta.speed) SPEED_FACTOR = meta.speed;
+                if (meta.tz) TZ_OFFSET = meta.tz;
                 initChapters(meta.chapters || []);
             });
 
@@ -385,12 +386,31 @@
             return HEADING_ARROWS[Math.round(deg / 45) % 8];
         }
 
+        function parseTzOffsetMs(tz) {
+            const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
+            if (!m) return 0;
+            const ms = (parseInt(m[2]) * 60 + parseInt(m[3])) * 60000;
+            return m[1] === '-' ? -ms : ms;
+        }
+
+        function formatGpxTime(iso) {
+            if (!iso) return '';
+            const d = new Date(new Date(iso).getTime() + parseTzOffsetMs(TZ_OFFSET));
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const yyyy = d.getUTCFullYear();
+            const hh = String(d.getUTCHours()).padStart(2, '0');
+            const min = String(d.getUTCMinutes()).padStart(2, '0');
+            return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
+        }
+
         function updateOverlay(pt) {
             if (pt.speed == null) { mapOverlay.style.display = 'none'; return; }
             mapOverlay.style.display = '';
             const spd = Math.round(pt.speed);
             const dir = pt.course != null ? headingLabel(pt.course) : '';
-            mapOverlay.innerHTML = `<span class="speed">${spd} km/h</span> ${dir}`;
+            const time = pt.time ? formatGpxTime(pt.time) : '';
+            mapOverlay.innerHTML = `<span class="speed">${spd} km/h</span> ${dir}${time ? `<br>${time}` : ''}`;
         }
 
         // --- Theme switcher ---
@@ -457,6 +477,7 @@
         let currentGpxChapter = null;
         let lastTrackpointIdx = -1;
         let SPEED_FACTOR = 1;
+        let TZ_OFFSET = '+00:00';
         const TILE_ZOOM = 13;
 
         function latLonToTile(lat, lon, z) {
@@ -526,15 +547,17 @@
                 };
                 const spd = pt.querySelector('speed');
                 const crs = pt.querySelector('course');
+                const time = pt.querySelector('time');
                 if (spd) p.speed = parseFloat(spd.textContent);
                 if (crs) p.course = parseFloat(crs.textContent);
+                if (time) p.time = time.textContent;
                 return p;
             });
         }
 
         function preloadAllGpx(chapters) {
-            const fetches = chapters.map(ch =>
-                fetch(`${ch.title}.gpx`)
+            const fetches = chapters.filter(ch => ch.gpx).map(ch =>
+                fetch(ch.gpx)
                     .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
                     .then(xml => {
                         const points = parseGpxText(xml);
