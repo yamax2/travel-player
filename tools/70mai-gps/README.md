@@ -5,7 +5,7 @@ Converts 70mai dashcam SD card data (GPS log + video segments) into a single GPX
 ## Usage
 
 ```
-go run tools/70mai-gps/main.go [-tz +05:00] [-input /Volumes/NO\ NAME] [-output 03]
+go run tools/70mai-gps/main.go [-tz +05:00] [-input /Volumes/NO\ NAME] [-output 03] [-skew 0]
 ```
 
 | Flag | Default | Description |
@@ -13,6 +13,7 @@ go run tools/70mai-gps/main.go [-tz +05:00] [-input /Volumes/NO\ NAME] [-output 
 | `-input` | `/Volumes/NO NAME` | Path to dashcam SD card |
 | `-output` | `.` | Directory for output files (also used as base name) |
 | `-tz` | `+05:00` | Local timezone offset, for converting video filename timestamps to UTC |
+| `-skew` | `0` | Seconds the GPS clock runs **ahead** of the video clock (RTC). Subtracted from GPS timestamps so the track lines up with the footage. See [GPS vs video clock skew](#gps-vs-video-clock-skew) |
 
 ## SD Card Layout
 
@@ -55,7 +56,7 @@ Pattern: `NO20260215-144120-000002F.MP4` -> local time `2026-02-15 14:41:20`, se
 
 ## Algorithm
 
-1. **Parse GPS**: Read all `GPSData*.txt`, skip headers/void/zero-coords, apply +8h UTC correction, sort by timestamp
+1. **Parse GPS**: Read all `GPSData*.txt`, skip headers/void/zero-coords, apply +8h UTC correction, subtract `-skew` (GPS-vs-RTC clock skew), sort by timestamp
 2. **Parse videos**: Glob `*.MP4` from `Normal/Front/`, extract time + sequence from filename, get duration via ffprobe, sort by sequence
 3. **Group into trips**: Walk sorted videos; gaps >= 10 min start a new trip. Gaps > 24h are treated as implausible timestamps and don't trigger a trip break
 4. **Collect GPS per trip**: For each video, binary-search GPS array for matching time range. Track `gpsOffset` = scaled time from trip start to first GPS fix in that trip
@@ -123,16 +124,17 @@ Each trip becomes a chapter. Chapter titles are the UTC start time of the first 
   "tz": "+05:00",
   "gpx": "03.gpx",
   "chapters": [
-    { "title": "09:41", "start": 0, "end": 1859.1, "gpsOffset": 60 },
-    { "title": "11:32", "start": 1859.1, "end": 3053.8, "gpsOffset": 28 },
-    { "title": "13:46", "start": 3053.8, "end": 4574.2, "gpsOffset": 27 }
+    { "title": "09:41", "start": 0, "end": 1859.1, "gpsOffset": 60, "gpsStart": "2026-02-15T09:41:20Z" },
+    { "title": "11:32", "start": 1859.1, "end": 3053.8, "gpsOffset": 28, "gpsStart": "2026-02-15T11:32:48Z" },
+    { "title": "13:46", "start": 3053.8, "end": 4574.2, "gpsOffset": 27, "gpsStart": "2026-02-15T13:46:05Z" }
   ]
 }
 ```
 
 - `start`/`end` — seconds in the combined (3x timelapse) video
 - `gpsOffset` — seconds from chapter start to first GPS fix (scaled to video time). Present only for chapters with GPS coverage
-- Chapters without any GPS data omit `gpsOffset`
+- `gpsStart` — absolute UTC time of the chapter's first GPS fix. The player uses it to slice the single GPX per chapter and to map video time → GPS time. Present only for chapters with GPS coverage
+- Chapters without any GPS data omit `gpsOffset`/`gpsStart`
 
 ## Quirks & Edge Cases
 
@@ -142,3 +144,17 @@ Each trip becomes a chapter. Chapter titles are the UTC start time of the first 
 - **gpsOffset on chapters**: Represents the scaled time (in video seconds) from the start of the chapter to when GPS data first becomes available
 - **Trip detection**: Gaps >= 10 min between consecutive videos start a new trip. Gaps > 24h are treated as bad timestamps and ignored for trip splitting
 - **ffprobe fallback**: If ffprobe fails for a video, duration defaults to 180s (3 min)
+
+## GPS vs video clock skew
+
+On some 70mai units the GPS chip's clock runs a fixed amount **ahead** of the camera's internal clock (RTC) — the RTC drives both the video file names and the burned-in on-screen timestamp, which is what the tool uses to line GPS up with the footage. When they disagree, the map marker is shifted by that skew (e.g. the marker shows the car still parked while the footage is already driving). One observed unit ran **~115 s ahead**.
+
+Correct it with `-skew <seconds>` (GPS ahead of video → positive). The value is subtracted from every GPS timestamp, so the track and the per-chapter offsets land on the video's clock.
+
+**Tell-tale signs of an uncorrected skew:**
+- The per-chapter "GPS lock delay" (`gpsOffset`, before scaling) is large and suspiciously similar across all chapters — a real lock delay varies (cold vs warm starts), a clock skew is constant.
+- After correcting, each `gpsStart` should fall within a few seconds of its chapter title (the first clip's time), reflecting a realistic warm-GPS lock.
+
+**Measuring it:** pick a physical event visible in both — easiest is the car pulling out of a parked spot. Extract a frame to read the on-screen clock (`ffmpeg -ss <videoSeconds> -i NN.mp4 -frames:v 1 frame.png`; the encode crops the top, so the bottom timestamp survives), and find the GPS time where speed goes 0 → moving. `skew = gps_time − onscreen_time`.
+
+**Fine-tuning:** the video is 3× sped, so **3 s of skew = 1 video-second** of marker shift. Less skew → the marker moves later (further behind the footage); more skew → earlier.

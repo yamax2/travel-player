@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="system">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        /* --- Theme definitions --- */
+        [data-theme="dark"] {
+            --bg: #111; --bg-sidebar: #1a1a1a; --bg-hover: #252525;
+            --bg-active: #2a2a3a; --text: #eee; --text-heading: #ccc;
+            --text-link: #aaa; --text-link-hover: #eee; --text-active: #fff;
+            --text-muted: #666; --text-muted-active: #88aadd;
+            --accent: #6688cc; --border: #222; --handle: #333;
+            --shadow: rgba(0,0,0,0.6);
+            --panel-border: #2a2a2a;
+            --bg-player: #000;
+        }
+        [data-theme="light"] {
+            --bg: #fafafa; --bg-sidebar: #f0f0f0; --bg-hover: #e4e4e4;
+            --bg-active: #dce0ec; --text: #222; --text-heading: #333;
+            --text-link: #555; --text-link-hover: #111; --text-active: #000;
+            --text-muted: #888; --text-muted-active: #4466aa;
+            --accent: #4466aa; --border: #ddd; --handle: #bbb;
+            --shadow: rgba(0,0,0,0.08);
+            --panel-border: var(--border);
+            --bg-player: #e0e0e0;
+        }
+        /* System: default to dark, override with media query */
+        [data-theme="system"] {
+            --bg: #111; --bg-sidebar: #1a1a1a; --bg-hover: #252525;
+            --bg-active: #2a2a3a; --text: #eee; --text-heading: #ccc;
+            --text-link: #aaa; --text-link-hover: #eee; --text-active: #fff;
+            --text-muted: #666; --text-muted-active: #88aadd;
+            --accent: #6688cc; --border: #222; --handle: #333;
+            --shadow: rgba(0,0,0,0.6);
+            --panel-border: #2a2a2a;
+            --bg-player: #000;
+        }
+        @media (prefers-color-scheme: light) {
+            [data-theme="system"] {
+                --bg: #fafafa; --bg-sidebar: #f0f0f0; --bg-hover: #e4e4e4;
+                --bg-active: #dce0ec; --text: #222; --text-heading: #333;
+                --text-link: #555; --text-link-hover: #111; --text-active: #000;
+                --text-muted: #888; --text-muted-active: #4466aa;
+                --accent: #4466aa; --border: #ddd; --handle: #bbb;
+                --shadow: rgba(0,0,0,0.08);
+                --panel-border: var(--border);
+                --bg-player: #e0e0e0;
+            }
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text-heading);
+        }
+
+        .main-layout {
+            display: flex;
+            width: 100%;
+            height: 80vh;
+        }
+
+        /* Theme selector */
+        .theme-select {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: var(--bg-sidebar);
+            color: var(--text-link);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .theme-select:focus {
+            box-shadow: 0 0 0 2px var(--accent);
+        }
+
+        /* Chapters sidebar */
+        .chapters-panel {
+            display: flex;
+            flex-shrink: 0;
+            width: 250px;
+            min-width: 0;
+            transition: width 0.2s;
+        }
+
+        .chapters-panel.collapsed {
+            width: auto;
+        }
+
+        .chapters-sidebar {
+            flex: 1;
+            min-width: 0;
+            background: var(--bg-sidebar);
+            border-radius: 8px 0 0 8px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .chapters-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chapters-sidebar::-webkit-scrollbar-track {
+            background: var(--bg-sidebar);
+        }
+
+        .chapters-sidebar::-webkit-scrollbar-thumb {
+            background: var(--handle);
+            border-radius: 3px;
+        }
+
+        .chapters-panel.collapsed .chapters-sidebar {
+            display: none;
+        }
+
+        .chapters-sidebar ul {
+            list-style: none;
+        }
+
+        .chapters-sidebar li a {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            color: var(--text-link);
+            text-decoration: none;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background-color 0.15s, color 0.15s, border-color 0.3s;
+        }
+
+        .chapters-sidebar li a:hover {
+            background: var(--bg-hover);
+            color: var(--text-link-hover);
+        }
+
+        .chapters-sidebar li.active a {
+            background: var(--bg-active);
+            color: var(--text-active);
+            border-left: 3px solid var(--accent);
+        }
+
+        .chapters-sidebar li a .ch-time {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chapters-sidebar li.active a .ch-time {
+            color: var(--text-muted-active);
+        }
+
+        .collapse-btn {
+            width: 24px;
+            flex-shrink: 0;
+            background: var(--bg-sidebar);
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            border-radius: 0 4px 4px 0;
+            transition: color 0.15s, background-color 0.3s;
+        }
+
+        .collapse-btn:hover {
+            color: var(--text-link-hover);
+            background: var(--bg-hover);
+        }
+
+        .chapters-panel.collapsed .collapse-btn {
+            border-radius: 4px;
+        }
+
+        /* Resize handles */
+        .resize-handle {
+            width: 6px;
+            flex-shrink: 0;
+            cursor: col-resize;
+            background: transparent;
+            position: relative;
+            z-index: 10;
+        }
+
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 32px;
+            background: var(--handle);
+            border-radius: 1px;
+            transition: background 0.15s, height 0.15s;
+        }
+
+        .resize-handle:hover::after {
+            background: var(--accent);
+            height: 64px;
+        }
+
+        body.resizing .resize-handle::after {
+            background: var(--accent);
+            height: 64px;
+        }
+
+        /* Video */
+        .player-wrapper {
+            flex: 1;
+            min-width: 200px;
+            background: var(--bg-player);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px var(--shadow);
+            border: 1px solid var(--panel-border);
+            transition: box-shadow 0.3s, border-color 0.3s;
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* hide the three-dot overflow menu in Chromium */
+        video::-webkit-media-controls-overflow-button {
+            display: none !important;
+        }
+
+        /* hide volume controls (no audio) */
+        video::-webkit-media-controls-mute-button,
+        video::-webkit-media-controls-volume-slider {
+            display: none !important;
+        }
+
+        /* Map */
+        #map {
+            width: 350px;
+            min-width: 0;
+            flex-shrink: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px var(--shadow);
+            border: 1px solid var(--panel-border);
+            transition: box-shadow 0.3s, border-color 0.3s;
+        }
+
+        #map.hidden {
+            display: none;
+        }
+
+        #map.hidden + .resize-handle-map {
+            display: none;
+        }
+
+        /* Speed/heading overlay on map */
+        .map-overlay {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 0.8rem;
+            font-variant-numeric: tabular-nums;
+            padding: 4px 8px;
+            border-radius: 4px;
+            pointer-events: none;
+            line-height: 1.4;
+            backdrop-filter: blur(4px);
+        }
+
+        .map-overlay .speed {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        /* Prevent text selection while dragging */
+        body.resizing {
+            user-select: none;
+            cursor: col-resize;
+        }
+
+        body.resizing video,
+        body.resizing iframe {
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+    <select class="theme-select" id="theme-select">
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+    </select>
+    <h1 id="title"></h1>
+    <div class="main-layout">
+        <div class="chapters-panel collapsed" id="chapters-panel">
+            <nav class="chapters-sidebar">
+                <ul id="chapter-list"></ul>
+            </nav>
+            <button class="collapse-btn" id="collapse-btn" title="Toggle chapters">▶</button>
+        </div>
+        <div class="resize-handle" id="resize-left"></div>
+        <div class="player-wrapper">
+            <video id="video" controls autoplay muted preload="metadata" disablePictureInPicture controlsList="nodownload noplaybackrate">
+            </video>
+        </div>
+        <div class="resize-handle resize-handle-map" id="resize-right"></div>
+        <div id="map" class="hidden"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const chapterList = document.getElementById('chapter-list');
+        const mapDiv = document.getElementById('map');
+        const titleEl = document.getElementById('title');
+        let chapters = [];
+
+        // --- Load index.json ---
+        fetch('index.json?t=' + Date.now())
+            .then(r => r.json())
+            .then(meta => {
+                document.title = meta.title;
+                titleEl.textContent = meta.title;
+                video.src = meta.video;
+                if (meta.speed) SPEED_FACTOR = meta.speed;
+                if (meta.tz) TZ_OFFSET = meta.tz;
+                initChapters(meta.chapters || [], meta.gpx);
+            });
+
+        // --- Collapse ---
+        const chaptersPanel = document.getElementById('chapters-panel');
+        const collapseBtn = document.getElementById('collapse-btn');
+        collapseBtn.addEventListener('click', () => {
+            const collapsed = chaptersPanel.classList.toggle('collapsed');
+            collapseBtn.textContent = collapsed ? '▶' : '◀';
+        });
+
+        // --- Map init ---
+        const map = L.map('map', { attributionControl: false });
+        const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(map);
+
+        // Speed/heading overlay
+        const mapOverlay = document.createElement('div');
+        mapOverlay.className = 'map-overlay';
+        mapOverlay.style.display = 'none';
+        mapDiv.appendChild(mapOverlay);
+
+        const HEADING_ARROWS = ['N ↑','NE ↗','E →','SE ↘','S ↓','SW ↙','W ←','NW ↖'];
+        function headingLabel(deg) {
+            return HEADING_ARROWS[Math.round(deg / 45) % 8];
+        }
+
+        function parseTzOffsetMs(tz) {
+            const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
+            if (!m) return 0;
+            const ms = (parseInt(m[2]) * 60 + parseInt(m[3])) * 60000;
+            return m[1] === '-' ? -ms : ms;
+        }
+
+        function formatGpxTime(iso) {
+            if (!iso) return '';
+            const d = new Date(new Date(iso).getTime() + parseTzOffsetMs(TZ_OFFSET));
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const yyyy = d.getUTCFullYear();
+            const hh = String(d.getUTCHours()).padStart(2, '0');
+            const min = String(d.getUTCMinutes()).padStart(2, '0');
+            return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
+        }
+
+        function updateOverlay(pt) {
+            if (pt.speed == null) { mapOverlay.style.display = 'none'; return; }
+            mapOverlay.style.display = '';
+            const spd = Math.round(pt.speed);
+            const dir = pt.course != null ? headingLabel(pt.course) : '';
+            const time = pt.time ? formatGpxTime(pt.time) : '';
+            mapOverlay.innerHTML = `<span class="speed">${spd} km/h</span> ${dir}${time ? `<br>${time}` : ''}`;
+        }
+
+        // --- Theme switcher ---
+        const themeSelect = document.getElementById('theme-select');
+
+        function applyTheme(theme) {
+            document.documentElement.dataset.theme = theme;
+            localStorage.setItem('theme', theme);
+            themeSelect.value = theme;
+        }
+
+        themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
+        applyTheme(localStorage.getItem('theme') || 'system');
+
+        // --- Resize handles ---
+        function setupResize(handleEl, getSize, setSize, invert) {
+            let startX, startW;
+            handleEl.addEventListener('mousedown', e => {
+                e.preventDefault();
+                startX = e.clientX;
+                startW = getSize();
+                document.body.classList.add('resizing');
+
+                function onMove(e) {
+                    const dx = e.clientX - startX;
+                    setSize(Math.max(100, startW + (invert ? -dx : dx)));
+                }
+
+                function onUp() {
+                    document.body.classList.remove('resizing');
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    if (!mapDiv.classList.contains('hidden')) map.invalidateSize();
+                }
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+
+        // Left handle: drag right = wider chapters panel
+        setupResize(
+            document.getElementById('resize-left'),
+            () => chaptersPanel.offsetWidth,
+            w => { chaptersPanel.style.width = w + 'px'; },
+            false
+        );
+
+        // Right handle: drag left = wider map (invert dx)
+        setupResize(
+            document.getElementById('resize-right'),
+            () => mapDiv.offsetWidth,
+            w => { mapDiv.style.width = w + 'px'; },
+            true
+        );
+
+        // Map state
+        const marker = L.circleMarker([0, 0], {
+            radius: 7, fillColor: '#ff4444', fillOpacity: 1,
+            color: '#fff', weight: 2
+        });
+        let trackLine = null;
+        let trackpoints = [];
+        let currentGpxChapter = null;
+        let lastTrackpointIdx = -1;
+        let SPEED_FACTOR = 1;
+        let TZ_OFFSET = '+00:00';
+        const TILE_ZOOM = 16;
+
+        function latLonToTile(lat, lon, z) {
+            const x = Math.floor((lon + 180) / 360 * (1 << z));
+            const latRad = lat * Math.PI / 180;
+            const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * (1 << z));
+            return [x, y];
+        }
+
+        let preloadedImages = [];
+
+        function preloadTiles(trackpoints) {
+            preloadedImages = [];
+            const seen = new Set();
+            const tiles = [];
+            const PAD = 3;
+            for (const pt of trackpoints) {
+                const [tx, ty] = latLonToTile(pt.lat, pt.lon, TILE_ZOOM);
+                for (let dx = -PAD; dx <= PAD; dx++) {
+                    for (let dy = -PAD; dy <= PAD; dy++) {
+                        const key = `${tx + dx},${ty + dy}`;
+                        if (!seen.has(key)) {
+                            seen.add(key);
+                            tiles.push([tx + dx, ty + dy]);
+                        }
+                    }
+                }
+            }
+            tiles.forEach(([x, y]) => {
+                const url = TILE_URL.replace('{z}', TILE_ZOOM).replace('{x}', x).replace('{y}', y);
+                const img = new Image();
+                img.src = url;
+                preloadedImages.push(img);
+            });
+        }
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function showMap() {
+            mapDiv.classList.remove('hidden');
+            document.getElementById('resize-right').style.display = '';
+            setTimeout(() => map.invalidateSize(), 0);
+        }
+
+        function hideMap() {
+            mapDiv.classList.add('hidden');
+            document.getElementById('resize-right').style.display = 'none';
+            mapOverlay.style.display = 'none';
+        }
+
+        function parseGpxText(xml) {
+            const doc = new DOMParser().parseFromString(xml, 'text/xml');
+            const pts = doc.querySelectorAll('trkpt');
+            return Array.from(pts).map(pt => {
+                const p = {
+                    lat: parseFloat(pt.getAttribute('lat')),
+                    lon: parseFloat(pt.getAttribute('lon'))
+                };
+                const spd = pt.querySelector('speed');
+                const crs = pt.querySelector('course');
+                const time = pt.querySelector('time');
+                if (spd) p.speed = parseFloat(spd.textContent);
+                if (crs) p.course = parseFloat(crs.textContent);
+                if (time) {
+                    p.time = time.textContent;
+                    p.epoch = Math.round(new Date(time.textContent).getTime() / 1000);
+                }
+                return p;
+            });
+        }
+
+        // Load the single continuous GPX once and slice it into per-chapter tracks.
+        function loadAllGpx(gpxFile, chapters) {
+            return fetch(gpxFile + '?t=' + Date.now())
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+                .then(xml => {
+                    const allPts = parseGpxText(xml);
+                    sliceChapters(chapters, allPts);
+                    if (allPts.length > 0) preloadTiles(allPts);
+                })
+                .catch(() => { /* no GPX */ });
+        }
+
+        // Partition the single track into per-chapter slices by each chapter's
+        // absolute GPS start time. The gaps between chapters are real recording
+        // breaks, so chapters never overlap; each owns [gpsStart, nextGpsStart).
+        function sliceChapters(chapters, allPts) {
+            const gpsChaps = chapters.filter(c => c.gpsStart);
+            gpsChaps.forEach(c => { c._epoch0 = Math.round(new Date(c.gpsStart).getTime() / 1000); });
+            for (let i = 0; i < gpsChaps.length; i++) {
+                const start = gpsChaps[i]._epoch0;
+                const end = i + 1 < gpsChaps.length ? gpsChaps[i + 1]._epoch0 : Infinity;
+                gpsChaps[i]._pts = allPts.filter(p => p.epoch >= start && p.epoch < end);
+            }
+        }
+
+        // Rightmost trackpoint with epoch <= targetEpoch. During a GPS dropout
+        // (no points for a stretch) this holds the marker at the last known
+        // position instead of drifting, until real time catches up.
+        function findPointIdx(pts, targetEpoch) {
+            if (targetEpoch <= pts[0].epoch) return 0;
+            const last = pts.length - 1;
+            if (targetEpoch >= pts[last].epoch) return last;
+            let lo = 0, hi = last;
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (pts[mid].epoch <= targetEpoch) lo = mid; else hi = mid - 1;
+            }
+            return lo;
+        }
+
+        function loadGpx(ch) {
+            if (ch.title === currentGpxChapter) return;
+            currentGpxChapter = ch.title;
+
+            if (trackLine) { map.removeLayer(trackLine); trackLine = null; }
+            marker.remove();
+            trackpoints = [];
+            lastTrackpointIdx = -1;
+
+            const pts = ch._pts;
+            if (!pts || pts.length === 0) { hideMap(); return; }
+
+            trackpoints = pts;
+            const latlngs = pts.map(p => [p.lat, p.lon]);
+            trackLine = L.polyline(latlngs, { color: '#4488cc', weight: 3, opacity: 0.7 }).addTo(map);
+            marker.setLatLng(latlngs[0]).addTo(map);
+            map.setView(latlngs[0], TILE_ZOOM);
+            showMap();
+        }
+
+        function getActiveChapter(t) {
+            for (let i = 0; i < chapters.length; i++) {
+                if (t >= chapters[i].start && t < chapters[i].end) return chapters[i];
+            }
+            return chapters[chapters.length - 1];
+        }
+
+        function initChapters(data, gpxFile) {
+            chapters = data;
+            chapters.forEach((ch, i) => {
+                const li = document.createElement('li');
+                li.dataset.index = i;
+                const a = document.createElement('a');
+                a.href = '#';
+                a.innerHTML = `<span class="ch-title">${ch.title}</span><span class="ch-time">${formatTime(ch.end - ch.start)}</span>`;
+                a.addEventListener('click', e => {
+                    e.preventDefault();
+                    video.currentTime = ch.start;
+                    video.play();
+                });
+                li.appendChild(a);
+                chapterList.appendChild(li);
+            });
+            // Load the single GPX, slice it per chapter, then show the first track
+            loadAllGpx(gpxFile, chapters).then(() => {
+                currentGpxChapter = null;
+                loadGpx(chapters[0]);
+            });
+        }
+
+        video.addEventListener('timeupdate', () => {
+            const t = video.currentTime;
+            const items = chapterList.children;
+            for (let i = 0; i < items.length; i++) {
+                const ch = chapters[i];
+                const isActive = t >= ch.start && t < ch.end;
+                items[i].classList.toggle('active', isActive);
+                if (isActive && items[i].scrollIntoViewIfNeeded) {
+                    items[i].scrollIntoViewIfNeeded(false);
+                }
+            }
+
+            // GPS sync
+            const ch = getActiveChapter(t);
+            if (ch) loadGpx(ch);
+
+            if (trackpoints.length > 0 && ch && ch._epoch0 != null) {
+                const elapsed = t - ch.start - (ch.gpsOffset || 0);
+                if (elapsed < 0) {
+                    // No GPS fix yet for this chapter (dashcam still locking on) —
+                    // hide the marker until real data starts, then track exactly.
+                    marker.remove();
+                    mapOverlay.style.display = 'none';
+                    lastTrackpointIdx = -1;
+                } else {
+                    // Map video time to absolute GPS time, then find that trackpoint.
+                    const targetEpoch = ch._epoch0 + elapsed * SPEED_FACTOR;
+                    const idx = findPointIdx(trackpoints, targetEpoch);
+                    if (idx !== lastTrackpointIdx) {
+                        lastTrackpointIdx = idx;
+                        const pt = trackpoints[idx];
+                        if (!map.hasLayer(marker)) marker.addTo(map);
+                        marker.setLatLng([pt.lat, pt.lon]);
+                        map.panTo([pt.lat, pt.lon], { animate: true, duration: 0.3 });
+                        updateOverlay(pt);
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

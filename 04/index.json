@@ -1,0 +1,58 @@
+{
+  "title": "2026-06-06",
+  "video": "04.mp4",
+  "speed": 3,
+  "tz": "+05:00",
+  "gpx": "04.gpx",
+  "chapters": [
+    {
+      "title": "05:40",
+      "start": 0,
+      "end": 226.1,
+      "gpsOffset": 19.1,
+      "gpsStart": "2026-06-06T05:45:37Z"
+    },
+    {
+      "title": "06:18",
+      "start": 226.1,
+      "end": 2240.4,
+      "gpsOffset": 7,
+      "gpsStart": "2026-06-06T06:19:02Z"
+    },
+    {
+      "title": "08:32",
+      "start": 2240.4,
+      "end": 2815.7,
+      "gpsOffset": 5.7,
+      "gpsStart": "2026-06-06T08:32:57Z"
+    },
+    {
+      "title": "09:13",
+      "start": 2815.7,
+      "end": 3156.9,
+      "gpsOffset": 9,
+      "gpsStart": "2026-06-06T09:13:46Z"
+    },
+    {
+      "title": "10:11",
+      "start": 3156.9,
+      "end": 3501,
+      "gpsOffset": 7,
+      "gpsStart": "2026-06-06T10:12:20Z"
+    },
+    {
+      "title": "12:05",
+      "start": 3501,
+      "end": 3986.5,
+      "gpsOffset": 8.3,
+      "gpsStart": "2026-06-06T12:05:57Z"
+    },
+    {
+      "title": "13:23",
+      "start": 3986.5,
+      "end": 5924.8,
+      "gpsOffset": 43,
+      "gpsStart": "2026-06-06T13:25:14Z"
+    }
+  ]
+}

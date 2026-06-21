@@ -36,6 +36,7 @@ type chapter struct {
 	Start     float64 `json:"start"`
 	End       float64 `json:"end"`
 	GPSOffset float64 `json:"gpsOffset,omitempty"`
+	GPSStart  string  `json:"gpsStart,omitempty"` // absolute UTC time of the chapter's first GPS fix
 	hasGPS    bool
 }
 
@@ -52,6 +53,10 @@ func main() {
 	tzFlag := flag.String("tz", "+05:00", "local timezone offset (e.g. +05:00)")
 	inputFlag := flag.String("input", "/Volumes/NO NAME", "path to dashcam SD card")
 	outputFlag := flag.String("output", ".", "directory for output files")
+	skewFlag := flag.Int("skew", 0, "seconds the GPS clock runs AHEAD of the dashcam video clock (RTC). "+
+		"70mai units often log GPS ~2 min ahead of the burned-in/file timestamps; subtract it so the "+
+		"track lines up with the footage. Measure by comparing a physical event (e.g. the car pulling out) "+
+		"in the video's on-screen clock vs the GPS speed going 0->moving.")
 	flag.Parse()
 
 	// Parse timezone offset
@@ -63,6 +68,15 @@ func main() {
 
 	// 1. Parse GPS data
 	gpsPoints := parseGPSFiles(*inputFlag)
+	// Correct GPS-vs-RTC clock skew: shift GPS timestamps back onto the video's
+	// (RTC) clock so points line up with the footage and the per-chapter offsets
+	// reflect the real GPS lock delay rather than the constant skew.
+	if *skewFlag != 0 {
+		for i := range gpsPoints {
+			gpsPoints[i].epoch -= int64(*skewFlag)
+		}
+		fmt.Fprintf(os.Stderr, "Applied GPS clock skew: -%ds\n", *skewFlag)
+	}
 	sort.Slice(gpsPoints, func(i, j int) bool { return gpsPoints[i].epoch < gpsPoints[j].epoch })
 	fmt.Fprintf(os.Stderr, "Parsed %d GPS points\n", len(gpsPoints))
 
@@ -111,6 +125,7 @@ func main() {
 		tripStart := cumStart
 		var tripHasGPS bool
 		var firstGPSOffset float64
+		var firstGPSEpoch int64
 		firstGPSOffsetSet := false
 
 		for _, v := range trip {
@@ -120,8 +135,11 @@ func main() {
 
 			if len(chapterPoints) > 0 {
 				if !firstGPSOffsetSet {
-					// gpsOffset for the chapter = time from chapter (trip) video start to first GPS fix
-					firstGPSOffset = cumStart - tripStart + float64(chapterPoints[0].epoch-startEpoch)
+					// gpsOffset for the chapter = time (in VIDEO seconds) from the chapter's
+					// video start to its first GPS fix. cumStart-tripStart is already video
+					// seconds; the in-clip lock delay is real seconds, so scale it by 1/3.
+					firstGPSOffset = cumStart - tripStart + float64(chapterPoints[0].epoch-startEpoch)/3.0
+					firstGPSEpoch = chapterPoints[0].epoch
 					firstGPSOffsetSet = true
 				}
 				tripHasGPS = true
@@ -141,6 +159,7 @@ func main() {
 		}
 		if tripHasGPS {
 			ch.GPSOffset = round1(firstGPSOffset)
+			ch.GPSStart = time.Unix(firstGPSEpoch, 0).UTC().Format("2006-01-02T15:04:05Z")
 			ch.hasGPS = true
 		}
 		chapters = append(chapters, ch)
@@ -149,7 +168,7 @@ func main() {
 	// Write single GPX
 	gpxName := outputName + ".gpx"
 	if len(allPoints) > 0 {
-		filled := fillGaps(allPoints, allPoints[0].epoch)
+		filled := fillGaps(allPoints)
 		writeGPX(filepath.Join(*outputFlag, gpxName), outputName, filled)
 		fmt.Fprintf(os.Stderr, "\nWrote %s (%d trackpoints)\n", gpxName, len(filled))
 	}
@@ -356,7 +375,7 @@ func groupTrips(videos []video) [][]video {
 		return nil
 	}
 
-	const gapThreshold = 10 * 60   // 10 minutes — normal trip break
+	const gapThreshold = 10 * 60     // 10 minutes — normal trip break
 	const badTSThreshold = 24 * 3600 // 24 hours — implausible gap means bad timestamp (e.g. pre-GPS-lock default date)
 
 	var trips [][]video
@@ -406,7 +425,7 @@ func findPointsInRange(points []trackpoint, startEpoch, endEpoch int64) []trackp
 	return result
 }
 
-func fillGaps(points []trackpoint, videoStartEpoch int64) []trackpoint {
+func fillGaps(points []trackpoint) []trackpoint {
 	if len(points) == 0 {
 		return nil
 	}
@@ -487,6 +506,7 @@ func writeJSON(path string, data tripJSON) {
 		Start     float64  `json:"start"`
 		End       float64  `json:"end"`
 		GPSOffset *float64 `json:"gpsOffset,omitempty"`
+		GPSStart  string   `json:"gpsStart,omitempty"`
 	}
 
 	type jsonOut struct {
@@ -515,6 +535,7 @@ func writeJSON(path string, data tripJSON) {
 		if ch.hasGPS {
 			offset := ch.GPSOffset
 			co.GPSOffset = &offset
+			co.GPSStart = ch.GPSStart
 		}
 		out.Chapters = append(out.Chapters, co)
 	}
