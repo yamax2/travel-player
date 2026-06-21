@@ -1,6 +1,7 @@
-#!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
+#!/bin/sh
+
 docker run -d --rm -p 8081:80 \
-  -v "$DIR":/video:ro \
-  -v "$DIR/nginx.conf":/etc/nginx/conf.d/default.conf:ro \
+  -v "$PWD":/video:ro \
+  -v "$PWD/nginx.conf":/etc/nginx/conf.d/default.conf:ro \
+  --name travel_movies \
   nginx:alpine
