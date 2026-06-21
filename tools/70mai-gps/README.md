@@ -123,6 +123,8 @@ Each trip becomes a chapter. Chapter titles are the UTC start time of the first 
   "speed": 3,
   "tz": "+05:00",
   "gpx": "03.gpx",
+  "mapZoom": 15,
+  "trackColor": "#4488cc",
   "chapters": [
     { "title": "09:41", "start": 0, "end": 1859.1, "gpsOffset": 60, "gpsStart": "2026-02-15T09:41:20Z" },
     { "title": "11:32", "start": 1859.1, "end": 3053.8, "gpsOffset": 28, "gpsStart": "2026-02-15T11:32:48Z" },
@@ -131,10 +133,13 @@ Each trip becomes a chapter. Chapter titles are the UTC start time of the first 
 }
 ```
 
+- `mapZoom` — default Leaflet zoom level for the map (player default `15` if absent)
+- `trackColor` — track polyline color on the map (player default `#4488cc` if absent)
 - `start`/`end` — seconds in the combined (3x timelapse) video
 - `gpsOffset` — seconds from chapter start to first GPS fix (scaled to video time). Present only for chapters with GPS coverage
 - `gpsStart` — absolute UTC time of the chapter's first GPS fix. The player uses it to slice the single GPX per chapter and to map video time → GPS time. Present only for chapters with GPS coverage
-- Chapters without any GPS data omit `gpsOffset`/`gpsStart`
+- `gaps` — recording pauses inside the chapter (camera stopped writing, then resumed within the same trip). Each entry is `{ "t": <absolute video-second of the cut>, "d": <real seconds skipped> }`. The concatenated video omits the pause, so the player adds `d` back to the video→GPS time mapping past `t`, keeping the marker in sync after the stop. Only pauses after the GPS fix are recorded (pre-fix pauses are absorbed into `gpsOffset`). Omitted when there are none
+- Chapters without any GPS data omit `gpsOffset`/`gpsStart`/`gaps`
 
 ## Quirks & Edge Cases
 

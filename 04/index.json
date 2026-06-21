@@ -1,54 +1,62 @@
 {
-  "title": "2026-06-06",
+  "title": "Поездка в Заамин",
   "video": "04.mp4",
   "speed": 3,
   "tz": "+05:00",
   "gpx": "04.gpx",
+  "mapZoom": 15,
+  "trackColor": "blue",
   "chapters": [
     {
-      "title": "05:40",
+      "title": "Гулистан",
       "start": 0,
       "end": 226.1,
       "gpsOffset": 19.1,
       "gpsStart": "2026-06-06T05:45:37Z"
     },
     {
-      "title": "06:18",
+      "title": "Гулистан - Водохранилище",
       "start": 226.1,
       "end": 2240.4,
       "gpsOffset": 7,
       "gpsStart": "2026-06-06T06:19:02Z"
     },
     {
-      "title": "08:32",
+      "title": "Заамин (700-летнее дерево)",
       "start": 2240.4,
       "end": 2815.7,
       "gpsOffset": 5.7,
       "gpsStart": "2026-06-06T08:32:57Z"
     },
     {
-      "title": "09:13",
+      "title": "Заамин до водопада",
       "start": 2815.7,
       "end": 3156.9,
       "gpsOffset": 9,
       "gpsStart": "2026-06-06T09:13:46Z"
     },
     {
-      "title": "10:11",
+      "title": "до подвестного моста",
       "start": 3156.9,
       "end": 3501,
       "gpsOffset": 7,
-      "gpsStart": "2026-06-06T10:12:20Z"
+      "gpsStart": "2026-06-06T10:12:20Z",
+      "gaps": [
+        {
+          "t": 3399.6,
+          "d": 202.9
+        }
+      ]
     },
     {
-      "title": "12:05",
+      "title": "Обратно до канатной дороги",
       "start": 3501,
       "end": 3986.5,
       "gpsOffset": 8.3,
       "gpsStart": "2026-06-06T12:05:57Z"
     },
     {
-      "title": "13:23",
+      "title": "обратно до Джизака",
       "start": 3986.5,
       "end": 5924.8,
       "gpsOffset": 43,

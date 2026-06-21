@@ -32,22 +32,43 @@ type video struct {
 }
 
 type chapter struct {
-	Title     string  `json:"title"`
-	Start     float64 `json:"start"`
-	End       float64 `json:"end"`
-	GPSOffset float64 `json:"gpsOffset,omitempty"`
-	GPSStart  string  `json:"gpsStart,omitempty"` // absolute UTC time of the chapter's first GPS fix
+	Title     string     `json:"title"`
+	Start     float64    `json:"start"`
+	End       float64    `json:"end"`
+	GPSOffset float64    `json:"gpsOffset,omitempty"`
+	GPSStart  string     `json:"gpsStart,omitempty"` // absolute UTC time of the chapter's first GPS fix
+	Gaps      []gapEntry `json:"gaps,omitempty"`
 	hasGPS    bool
 }
 
-type tripJSON struct {
-	Title    string    `json:"title"`
-	Video    string    `json:"video"`
-	Speed    int       `json:"speed"`
-	TZ       string    `json:"tz"`
-	GPX      string    `json:"gpx"`
-	Chapters []chapter `json:"chapters"`
+// gapEntry marks a recording pause inside a chapter (camera stopped writing for
+// a while, then resumed). The concatenated video skips the pause, so the player
+// must add D real-seconds back to the video->GPS time mapping past video-time T.
+type gapEntry struct {
+	T float64 `json:"t"` // absolute video-time (sec) where the footage cuts
+	D float64 `json:"d"` // real-time seconds skipped at the cut
 }
+
+type tripJSON struct {
+	Title      string    `json:"title"`
+	Video      string    `json:"video"`
+	Speed      int       `json:"speed"`
+	TZ         string    `json:"tz"`
+	GPX        string    `json:"gpx"`
+	MapZoom    int       `json:"mapZoom"`
+	TrackColor string    `json:"trackColor"`
+	Chapters   []chapter `json:"chapters"`
+}
+
+// Player config defaults (editable per-dir in the generated index.json).
+const (
+	defaultMapZoom    = 15
+	defaultTrackColor = "#4488cc"
+)
+
+// gapPauseThreshold is the minimum clip-to-clip gap (seconds) treated as a
+// recording pause worth correcting for; smaller gaps are just encoder rounding.
+const gapPauseThreshold = 2.0
 
 func main() {
 	tzFlag := flag.String("tz", "+05:00", "local timezone offset (e.g. +05:00)")
@@ -104,8 +125,10 @@ func main() {
 	os.MkdirAll(*outputFlag, 0755)
 	outputName := filepath.Base(*outputFlag) // e.g. "03"
 
-	var chapters []chapter
-	var allPoints []trackpoint
+	var (
+		chapters  []chapter
+		allPoints []trackpoint
+	)
 	cumStart := 0.0
 
 	for tripIdx, trip := range trips {
@@ -123,14 +146,30 @@ func main() {
 
 		// Sum durations for this trip, collect GPS points
 		tripStart := cumStart
-		var tripHasGPS bool
-		var firstGPSOffset float64
-		var firstGPSEpoch int64
-		firstGPSOffsetSet := false
+		var (
+			tripHasGPS        bool
+			firstGPSOffset    float64
+			firstGPSEpoch     int64
+			firstGPSOffsetSet bool
+			gaps              []gapEntry
+			prevEnd           float64
+			prevEndSet        bool
+		)
 
 		for _, v := range trip {
 			startEpoch := v.startUTC.Unix()
 			endEpoch := startEpoch + int64(math.Ceil(v.duration))
+
+			// Detect a recording pause before this clip (camera stopped writing,
+			// then resumed within the same trip). The concatenated video skips it.
+			// Only record pauses after the GPS fix — pre-fix pauses are already
+			// absorbed into gpsOffset (which is anchored at the first fix).
+			if prevEndSet && firstGPSOffsetSet {
+				if gap := float64(startEpoch) - prevEnd; gap > gapPauseThreshold {
+					gaps = append(gaps, gapEntry{T: round1(cumStart), D: round1(gap)})
+				}
+			}
+
 			chapterPoints := findPointsInRange(gpsPoints, startEpoch, endEpoch)
 
 			if len(chapterPoints) > 0 {
@@ -150,6 +189,8 @@ func main() {
 			}
 
 			cumStart += v.duration / 3.0
+			prevEnd = float64(startEpoch) + v.duration
+			prevEndSet = true
 		}
 
 		ch := chapter{
@@ -160,6 +201,7 @@ func main() {
 		if tripHasGPS {
 			ch.GPSOffset = round1(firstGPSOffset)
 			ch.GPSStart = time.Unix(firstGPSEpoch, 0).UTC().Format("2006-01-02T15:04:05Z")
+			ch.Gaps = gaps
 			ch.hasGPS = true
 		}
 		chapters = append(chapters, ch)
@@ -188,12 +230,14 @@ func main() {
 	}
 
 	idx := tripJSON{
-		Title:    firstDate,
-		Video:    outputName + ".mp4",
-		Speed:    3,
-		TZ:       *tzFlag,
-		GPX:      gpxName,
-		Chapters: chapters,
+		Title:      firstDate,
+		Video:      outputName + ".mp4",
+		Speed:      3,
+		TZ:         *tzFlag,
+		GPX:        gpxName,
+		MapZoom:    defaultMapZoom,
+		TrackColor: defaultTrackColor,
+		Chapters:   chapters,
 	}
 	writeJSON(filepath.Join(*outputFlag, "index.json"), idx)
 	fmt.Fprintf(os.Stderr, "Wrote index.json\n")
@@ -505,25 +549,30 @@ func writeJSON(path string, data tripJSON) {
 		Title     string   `json:"title"`
 		Start     float64  `json:"start"`
 		End       float64  `json:"end"`
-		GPSOffset *float64 `json:"gpsOffset,omitempty"`
-		GPSStart  string   `json:"gpsStart,omitempty"`
+		GPSOffset *float64   `json:"gpsOffset,omitempty"`
+		GPSStart  string     `json:"gpsStart,omitempty"`
+		Gaps      []gapEntry `json:"gaps,omitempty"`
 	}
 
 	type jsonOut struct {
-		Title    string       `json:"title"`
-		Video    string       `json:"video"`
-		Speed    int          `json:"speed"`
-		TZ       string       `json:"tz"`
-		GPX      string       `json:"gpx"`
-		Chapters []chapterOut `json:"chapters"`
+		Title      string       `json:"title"`
+		Video      string       `json:"video"`
+		Speed      int          `json:"speed"`
+		TZ         string       `json:"tz"`
+		GPX        string       `json:"gpx"`
+		MapZoom    int          `json:"mapZoom"`
+		TrackColor string       `json:"trackColor"`
+		Chapters   []chapterOut `json:"chapters"`
 	}
 
 	out := jsonOut{
-		Title: data.Title,
-		Video: data.Video,
-		Speed: data.Speed,
-		TZ:    data.TZ,
-		GPX:   data.GPX,
+		Title:      data.Title,
+		Video:      data.Video,
+		Speed:      data.Speed,
+		TZ:         data.TZ,
+		GPX:        data.GPX,
+		MapZoom:    data.MapZoom,
+		TrackColor: data.TrackColor,
 	}
 
 	for _, ch := range data.Chapters {
@@ -536,6 +585,7 @@ func writeJSON(path string, data tripJSON) {
 			offset := ch.GPSOffset
 			co.GPSOffset = &offset
 			co.GPSStart = ch.GPSStart
+			co.Gaps = ch.Gaps
 		}
 		out.Chapters = append(out.Chapters, co)
 	}

@@ -359,6 +359,8 @@
                 video.src = meta.video;
                 if (meta.speed) SPEED_FACTOR = meta.speed;
                 if (meta.tz) TZ_OFFSET = meta.tz;
+                if (meta.mapZoom) TILE_ZOOM = meta.mapZoom;
+                if (meta.trackColor) TRACK_COLOR = meta.trackColor;
                 initChapters(meta.chapters || [], meta.gpx);
             });
 
@@ -478,7 +480,8 @@
         let lastTrackpointIdx = -1;
         let SPEED_FACTOR = 1;
         let TZ_OFFSET = '+00:00';
-        const TILE_ZOOM = 16;
+        let TILE_ZOOM = 15;            // default map zoom; overridden by index.json "mapZoom"
+        let TRACK_COLOR = '#4488cc';   // default track color; overridden by index.json "trackColor"
 
         function latLonToTile(lat, lon, z) {
             const x = Math.floor((lon + 180) / 360 * (1 << z));
@@ -609,7 +612,7 @@
 
             trackpoints = pts;
             const latlngs = pts.map(p => [p.lat, p.lon]);
-            trackLine = L.polyline(latlngs, { color: '#4488cc', weight: 3, opacity: 0.7 }).addTo(map);
+            trackLine = L.polyline(latlngs, { color: TRACK_COLOR, weight: 3, opacity: 0.7 }).addTo(map);
             marker.setLatLng(latlngs[0]).addTo(map);
             map.setView(latlngs[0], TILE_ZOOM);
             showMap();
@@ -671,7 +674,11 @@
                     lastTrackpointIdx = -1;
                 } else {
                     // Map video time to absolute GPS time, then find that trackpoint.
-                    const targetEpoch = ch._epoch0 + elapsed * SPEED_FACTOR;
+                    // Add back any recording pauses (camera stopped) before this video
+                    // time — the concatenated video skips them, so real time jumped ahead.
+                    let pause = 0;
+                    if (ch.gaps) for (const g of ch.gaps) if (g.t <= t) pause += g.d;
+                    const targetEpoch = ch._epoch0 + elapsed * SPEED_FACTOR + pause;
                     const idx = findPointIdx(trackpoints, targetEpoch);
                     if (idx !== lastTrackpointIdx) {
                         lastTrackpointIdx = idx;
