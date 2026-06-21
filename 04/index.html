@@ -110,7 +110,9 @@
         }
 
         .chapters-panel.collapsed {
-            width: auto;
+            /* override any inline width left over from a resize so the
+               collapsed panel shrinks back to just the button (frees video) */
+            width: auto !important;
         }
 
         .chapters-sidebar {
